@@ -77,13 +77,20 @@ const upload = multer({
 
 let ai: GoogleGenAI | null = null;
 function getGenAI() { 
- if (!ai) {
- if (!process.env.GEMINI_API_KEY) {
- throw new Error("GEMINI_API_KEY is missing");
- }
- ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
- }
- return ai;
+  if (!ai) {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is missing");
+    }
+    ai = new GoogleGenAI({ 
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+  }
+  return ai;
 }
 
 const loginSchema = z.object({
@@ -279,6 +286,236 @@ app.post("/api/dashboard", async (req: any, res: any) => {
  const status = (error?.message || '').includes('Session expired') ? 401 : 500;
  res.status(status).json({ error: error.message || 'Failed to fetch attendance' });
  }
+});
+
+// --- LMS Endpoints ---
+const lmsStoreFile = path.join(process.cwd(), "data", "lms-store.json");
+
+function getLmsStore() {
+  try {
+    if (fs.existsSync(lmsStoreFile)) {
+      return JSON.parse(fs.readFileSync(lmsStoreFile, "utf-8"));
+    }
+  } catch (e) {
+    console.error("Error reading LMS store:", e);
+  }
+  return { materials: [], assignments: [], announcements: [] };
+}
+
+function saveLmsStore(data: any) {
+  try {
+    fs.writeFileSync(lmsStoreFile, JSON.stringify(data, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Error saving LMS store:", e);
+  }
+}
+
+app.get("/api/lms/materials", (req, res) => {
+  const store = getLmsStore();
+  res.json({ success: true, materials: store.materials || [] });
+});
+
+app.post("/api/lms/materials", (req, res) => {
+  const store = getLmsStore();
+  const material = req.body;
+  if (!material.id) material.id = `mat-${Date.now()}`;
+  material.uploadedAt = material.uploadedAt || new Date().toISOString();
+  store.materials = [material, ...(store.materials || [])];
+  saveLmsStore(store);
+  res.json({ success: true, material });
+});
+
+app.delete("/api/lms/materials/:id", (req, res) => {
+  const store = getLmsStore();
+  store.materials = (store.materials || []).filter((m: any) => m.id !== req.params.id);
+  saveLmsStore(store);
+  res.json({ success: true });
+});
+
+app.get("/api/lms/assignments", (req, res) => {
+  const store = getLmsStore();
+  res.json({ success: true, assignments: store.assignments || [] });
+});
+
+app.post("/api/lms/assignments", (req, res) => {
+  const store = getLmsStore();
+  const assignment = req.body;
+  if (!assignment.id) assignment.id = `asg-${Date.now()}`;
+  store.assignments = [assignment, ...(store.assignments || [])];
+  saveLmsStore(store);
+  res.json({ success: true, assignment });
+});
+
+app.get("/api/lms/announcements", (req, res) => {
+  const store = getLmsStore();
+  res.json({ success: true, announcements: store.announcements || [] });
+});
+
+app.post("/api/lms/announcements", (req, res) => {
+  const store = getLmsStore();
+  const announcement = req.body;
+  if (!announcement.id) announcement.id = `ann-${Date.now()}`;
+  store.announcements = [announcement, ...(store.announcements || [])];
+  saveLmsStore(store);
+  res.json({ success: true, announcement });
+});
+
+// --- AI Doubt Clarification Chatbot Endpoint ---
+function generateAcademicFallbackResponse(query: string, courseCode?: string): string {
+  const lower = (query || "").toLowerCase();
+  
+  if (lower.includes("avl") || lower.includes("rotation") || lower.includes("tree")) {
+    return `### AVL Tree Balance & Rotation Guide
+
+In an AVL tree, the Balance Factor (BF) of any node is:
+BF(node) = Height(LeftSubtree) - Height(RightSubtree)
+An AVL invariant requires BF ∈ {-1, 0, +1}.
+
+#### The 4 Rotation Cases:
+1. LL (Left-Left): Single Right Rotation around the unbalanced node.
+2. RR (Right-Right): Single Left Rotation around the unbalanced node.
+3. LR (Left-Right): Double rotation — first a Left Rotation on the left child, then a Right Rotation on the unbalanced root.
+4. RL (Right-Left): Double rotation — first a Right Rotation on the right child, then a Left Rotation on the unbalanced root.
+
+\`\`\`cpp
+// C++ Single Right Rotation Implementation
+Node* rightRotate(Node* y) {
+    Node* x = y->left;
+    Node* T2 = x->right;
+    x->right = y;
+    y->left = T2;
+    y->height = max(height(y->left), height(y->right)) + 1;
+    x->height = max(height(x->left), height(x->right)) + 1;
+    return x;
+}
+\`\`\`
+
+**Time Complexity:** O(log n) for search, insertion, and deletion!`;
+  }
+
+  if (lower.includes("bcnf") || lower.includes("3nf") || lower.includes("normal") || lower.includes("database")) {
+    return `### Database Normalization: 3NF vs BCNF
+
+* Third Normal Form (3NF):
+  For every non-trivial functional dependency X → Y:
+  1. X must be a Superkey, OR
+  2. Y is a Prime Attribute (part of some Candidate Key).
+
+* Boyce-Codd Normal Form (BCNF):
+  A stricter form of 3NF. For every non-trivial functional dependency X → Y:
+  X MUST be a Superkey (no exceptions for prime attributes!).
+
+**Key Takeaway:** Every relation in BCNF is guaranteed to be in 3NF, but not every 3NF relation is in BCNF. BCNF eliminates all redundancy due to functional dependencies.`;
+  }
+
+  if (lower.includes("react") || lower.includes("optimistic") || lower.includes("hook") || lower.includes("frontend")) {
+    return `### React 19 & Optimistic UI Architecture
+
+React 19 introduces native hooks to manage asynchronous UI transitions without lag:
+
+1. \`useOptimistic()\`:
+   Allows you to render immediate visual state before a server action completes. If the server action rejects or fails, React automatically discards the optimistic value and reverts to the previous authoritative state!
+
+2. \`useActionState()\`:
+   Manages pending loading states and form errors natively with zero boilerplate.
+
+\`\`\`tsx
+// Example of useOptimistic in a Doubt Reply thread
+const [optimisticReplies, addOptimisticReply] = useOptimistic(
+  replies,
+  (state, newReplyText) => [
+    ...state,
+    { id: 'temp-id', content: newReplyText, pending: true }
+  ]
+);
+\`\`\``;
+  }
+
+  if (lower.includes("svd") || lower.includes("eigen") || lower.includes("ai") || lower.includes("machine learning")) {
+    return `### Singular Value Decomposition (SVD) in AI
+
+Any real matrix A ∈ ℝ^(m × n) can be factored as:
+A = U · Σ · Vᵀ
+
+Where:
+* U (m × m): Left singular vectors (eigenvectors of A · Aᵀ)
+* Σ (m × n): Diagonal matrix containing singular values σ₁ ≥ σ₂ ≥ … ≥ 0
+* Vᵀ (n × n): Right singular vectors (eigenvectors of Aᵀ · A)
+
+**Eckart–Young Theorem:** Retaining the top k singular values gives the mathematically optimal rank-k approximation of A in Frobenius norm! Used in PCA, Latent Semantic Analysis (LSA), and recommender systems.`;
+  }
+
+  return `### Academic Concept Breakdown
+
+Great question regarding **${courseCode || "your coursework"}**!
+
+Here is how to approach this concept step-by-step:
+
+1. **Core Intuition:** Start by breaking the problem into the base case and recursive or iterative invariants.
+2. **Formal Definition:** Review the syllabus unit lecture notes in the Course Materials Hub for the complete formal proof.
+3. **Practical Implementation:** Verify edge cases (e.g. empty lists, single node boundaries, null pointers, off-by-one indices).
+
+Feel free to paste your specific code snippet or math expression, and I will step through it line-by-line with you!`;
+}
+
+app.post("/api/ai/doubt-chat", async (req, res) => {
+  try {
+    const { messages, courseCode, currentDoubt } = req.body;
+    const query = currentDoubt || (messages && messages[messages.length - 1]?.content) || "";
+
+    const systemInstruction = `You are "KLU Academic AI Tutor" — an expert academic mentor for engineering and computer science students at KL University.
+Current Subject: ${courseCode || 'Computer Science & Engineering'}.
+Your mission is to clarify students' doubts with utmost clarity, patience, and enthusiasm.
+
+CRITICAL FORMATTING RULES:
+1. Do NOT use LaTeX math delimiters ($ or $$). Write all mathematical equations in clean, readable plain Unicode characters (e.g., A = U · Σ · Vᵀ, O(log n), A ∈ ℝ^(m×n), σ₁ ≥ σ₂ ≥ 0, X → Y).
+2. Never enclose titles in raw asterisks like **### Title** or **Title** in headings. Use plain headings like "### Title".
+3. Use clean code snippets with language tags (cpp, java, python, tsx, sql).
+4. Break down complex logic with bullet points and bold key terms.`;
+
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const client = getGenAI();
+        const formattedContents = [];
+
+        if (Array.isArray(messages) && messages.length > 0) {
+          for (const msg of messages) {
+            formattedContents.push({
+              role: msg.role === 'assistant' || msg.role === 'model' ? 'model' : 'user',
+              parts: [{ text: msg.content }]
+            });
+          }
+        } else {
+          formattedContents.push({
+            role: 'user',
+            parts: [{ text: query }]
+          });
+        }
+
+        const response = await client.models.generateContent({
+          model: "gemini-3.8-flash",
+          contents: formattedContents,
+          config: {
+            systemInstruction,
+            temperature: 0.7,
+          }
+        });
+
+        const replyText = response.text || generateAcademicFallbackResponse(query, courseCode);
+        return res.json({ success: true, reply: replyText });
+      } catch (err: any) {
+        console.error("Gemini API call failed, using academic fallback:", err.message);
+        const fallback = generateAcademicFallbackResponse(query, courseCode);
+        return res.json({ success: true, reply: fallback });
+      }
+    } else {
+      const fallback = generateAcademicFallbackResponse(query, courseCode);
+      return res.json({ success: true, reply: fallback });
+    }
+  } catch (error: any) {
+    console.error("Error in /api/ai/doubt-chat:", error);
+    res.status(500).json({ error: "Failed to generate AI response" });
+  }
 });
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

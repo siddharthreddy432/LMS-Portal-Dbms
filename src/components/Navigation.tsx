@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { PieChart, Calculator, CalendarDays, Menu, LogOut, LogIn, X, Home, Table, MessageSquareHeart, LayoutDashboard, Gamepad2, ExternalLink, Globe } from 'lucide-react';
+import { PieChart, Calculator, CalendarDays, Menu, LogOut, LogIn, X, Home, Table, MessageSquareHeart, LayoutDashboard, Gamepad2, GraduationCap, Bot, ExternalLink, Globe, BookOpen } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import ThemeSelector from './ThemeSelector';
@@ -14,8 +14,10 @@ export default function Navigation() {
 
  const links = [
     { name: 'Home', path: '/', icon: <Home size={17} /> },
-    { name: 'Dashboard', path: '/dashboard', icon: <PieChart size={17} /> },
-    { name: 'My Courses', path: '/courses', icon: <Gamepad2 size={17} /> },
+    { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={17} /> },
+    { name: 'My Courses', path: '/courses', icon: <BookOpen size={17} /> },
+    { name: 'Lecturers', path: '/lecturers', icon: <GraduationCap size={17} /> },
+    { name: 'Help Desk', path: '/help-desk', icon: <Bot size={17} /> },
     { name: 'New ERP', path: 'https://klhunderground.ai.studio/', icon: <ExternalLink size={17} />, external: true },
     { name: 'Website', path: 'https://klh.edu.in/bachupally/', icon: <Globe size={17} />, external: true },
     { name: 'Contact', path: '/contact', icon: <MessageSquareHeart size={17} /> },

@@ -33,7 +33,7 @@ export default function Landing() {
  className="text-6xl md:text-8xl font-black leading-tight text-[var(--text-primary)]"
  >
  Don't build <br/>
- another <span className="marker-underline z-10 relative">boring</span> ERP.
+ another <span className="marker-underline z-10 relative">boring</span> LMS.
  </motion.h1>
 
  <motion.p 
